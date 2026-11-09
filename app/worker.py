@@ -65,6 +65,22 @@ def run_job(job_id: str):
         dubbed = os.path.join(d, "dubbed_audio.wav")
         pipeline.build_dub_audio(segs, voice, dur, dubbed,
                                  on_error=lambda m: jobs.log_job(job_id, m))
+        jobs.update_job(job_id, stage="bgm", progress=0.80, note="配音完成")
+
+        # 4a. keep BGM/SFX: separate vocals from original audio, remix
+        final_audio = dubbed
+        bgm_ok = False
+        if p.get("keep_bgm"):
+            try:
+                no_vocals = pipeline.separate_bgm(video, d)
+                final_audio = os.path.join(d, "final_audio.wav")
+                pipeline.mix_bgm(dubbed, no_vocals, final_audio, dur,
+                                 bgm_volume=float(p.get("bgm_volume") or 1.0))
+                bgm_ok = True
+                jobs.log_job(job_id, "背景音乐/音效已分离并混回配音")
+            except Exception as e:
+                final_audio = dubbed
+                jobs.log_job(job_id, f"背景音乐分离失败，仅保留配音: {e}")
         jobs.update_job(job_id, stage="lipsync", progress=0.86, note="配音完成")
 
         # 4b. lip-sync (optional external service)
@@ -73,7 +89,7 @@ def run_job(job_id: str):
         if p.get("lipsync"):
             try:
                 lipsynced = os.path.join(d, "lipsynced.mp4")
-                lip_ok = pipeline.lipsync(video, dubbed, lipsynced)
+                lip_ok = pipeline.lipsync(video, final_audio, lipsynced)
                 if lip_ok:
                     base_video = lipsynced
                     jobs.log_job(job_id, "口型同步完成（外部服务）")
@@ -88,7 +104,7 @@ def run_job(job_id: str):
                  "fr": "fre", "de": "ger", "ru": "rus", "pt": "por", "it": "ita",
                  "ar": "ara", "id": "ind", "vi": "vie", "th": "tha", "tr": "tur",
                  "hi": "hin"}.get(tgt, "eng")
-        pipeline.compose(base_video, dubbed, os.path.join(d, "translated.srt"),
+        pipeline.compose(base_video, final_audio, os.path.join(d, "translated.srt"),
                          out, lang=lang3, burn_subs=bool(p.get("burn_subs")))
         jobs.update_job(
             job_id, status="done", stage="done", progress=1.0, finished_at=__import__("time").time(),
@@ -98,9 +114,11 @@ def run_job(job_id: str):
                 "source_srt": f"/jobs/{job_id}/source.srt",
                 "translated_srt": f"/jobs/{job_id}/translated.srt",
                 "dubbed_audio": f"/jobs/{job_id}/dubbed_audio.wav",
+                "final_audio": f"/jobs/{job_id}/final_audio.wav" if bgm_ok else f"/jobs/{job_id}/dubbed_audio.wav",
                 "segments": segs,
                 "src_lang": src_lang,
                 "lipsync": lip_ok,
+                "bgm_kept": bgm_ok,
             })
     except Exception as e:
         traceback.print_exc()

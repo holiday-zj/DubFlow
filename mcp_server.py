@@ -50,10 +50,14 @@ def dubflow_capabilities() -> dict:
 def dubflow_submit(video_path: str, tgt_lang: str, src_lang: str = "",
                    whisper_model: str = "small", translate_engine: str = "marian",
                    gender: str = "f", voice: str = "", burn_subs: bool = False,
-                   lipsync: bool = False) -> dict:
+                   lipsync: bool = False, keep_bgm: bool = True,
+                   bgm_volume: float = 1.0) -> dict:
     """Submit a local video file for AI dubbing into tgt_lang.
 
     video_path: absolute path to an mp4/mov/mkv on this machine.
+    keep_bgm: preserve original background music/SFX under the dubbed voice
+              (vocal separation via demucs + remix; CPU-slow for long videos).
+    bgm_volume: background volume multiplier (0.0-2.0).
     Returns job_id; poll with dubflow_status.
     """
     _ensure_worker()
@@ -63,7 +67,8 @@ def dubflow_submit(video_path: str, tgt_lang: str, src_lang: str = "",
         raise ValueError(f"unsupported tgt_lang; choose from {sorted(config.VOICES)}")
     params = dict(tgt_lang=tgt_lang, src_lang=src_lang, whisper_model=whisper_model,
                   translate_engine=translate_engine, gender=gender, voice=voice,
-                  burn_subs=burn_subs, lipsync=lipsync,
+                  burn_subs=burn_subs, lipsync=lipsync, keep_bgm=keep_bgm,
+                  bgm_volume=bgm_volume,
                   filename=os.path.basename(video_path))
     job = jobs.create_job(params)
     d = jobs.job_dir(job["id"])

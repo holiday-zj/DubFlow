@@ -63,6 +63,9 @@ h3{margin-bottom:8px;font-size:15px}
   <div class="checkline">
     <label style="display:inline"><input type="checkbox" id="burn"> 字幕烧录进画面</label>
     &nbsp;&nbsp;
+    <label style="display:inline"><input type="checkbox" id="keepbgm" checked> 保留背景音乐/音效</label>
+    <span id="bgmvolwrap" style="display:inline">音量 <input type="range" id="bgmvol" min="0" max="200" value="100" style="width:90px;vertical-align:middle"><span id="bgmvolnum">100%</span></span>
+    &nbsp;&nbsp;
     <label style="display:inline"><input type="checkbox" id="lipsync"> 口型同步（需配置外部服务）</label>
     <span id="lipstate" class="pill"></span>
   </div>
@@ -98,6 +101,9 @@ fetch('/api/meta').then(r=>r.json()).then(m=>{
   $('lipstate').textContent = m.lipsync_configured?'已配置':'未配置，自动跳过';
 });
 
+$('keepbgm').onchange=()=>$('bgmvolwrap').style.display=$('keepbgm').checked?'inline':'none';
+$('bgmvol').oninput=()=>$('bgmvolnum').textContent=$('bgmvol').value+'%';
+
 $('drop').onclick=()=>$('file').click();
 $('file').onchange=e=>{ if(e.target.files[0]) setFile(e.target.files[0]); };
 $('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('on')};
@@ -116,6 +122,8 @@ $('go').onclick=async()=>{
   fd.append('gender',$('gender').value);
   fd.append('burn_subs',$('burn').checked);
   fd.append('lipsync',$('lipsync').checked);
+  fd.append('keep_bgm',$('keepbgm').checked);
+  fd.append('bgm_volume',($('bgmvol').value/100).toFixed(2));
   $('go').disabled=true;
   $('progressCard').style.display='block';
   $('resultCard').classList.remove('show');
@@ -149,7 +157,10 @@ async function poll(){
 
 function showResult(j){
   const a=j.artifacts;
-  $('links').innerHTML=`<a href="${a.video}" download>⬇ 配音视频</a><a href="${a.translated_srt}" download>⬇ 译文字幕SRT</a><a href="${a.source_srt}" download>⬇ 原文字幕SRT</a><a href="${a.dubbed_audio}" download>⬇ 配音音轨</a>`;
+  let links=`<a href="${a.video}" download>⬇ 配音视频</a><a href="${a.translated_srt}" download>⬇ 译文字幕SRT</a><a href="${a.source_srt}" download>⬇ 原文字幕SRT</a><a href="${a.final_audio}" download>⬇ 配音音轨${a.bgm_kept?'(含BGM)':''}</a>`;
+  if(a.bgm_kept) links+=` <span class="pill done" style="color:var(--ok)">♪ 已保留背景音乐</span>`;
+  if(a.lipsync) links+=` <span class="pill done" style="color:var(--ok)">口型已同步</span>`;
+  $('links').innerHTML=links;
   $('player').src=a.video;
   const tb=$('segtable').querySelector('tbody');tb.innerHTML='';
   for(const s of (j.segments||[])){

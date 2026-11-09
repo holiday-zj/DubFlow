@@ -273,6 +273,55 @@ def build_dub_audio(segments, voice: str, total_dur: float, out_wav: str,
     return out_wav
 
 
+# ---------------- stage 4a: vocal/BGM separation (demucs) ----------------
+
+def separate_bgm(video_path: str, workdir: str) -> str:
+    """Split audio into vocals vs background (music/SFX) with demucs htdemucs.
+    Returns path to no_vocals.wav (44.1kHz stereo). Raises on failure."""
+    full = os.path.join(workdir, "audio_full.wav")
+    subprocess.run([config.FFMPEG, "-y", "-i", video_path, "-vn", "-ac", "2",
+                    "-ar", "44100", "-c:a", "pcm_s16le", full],
+                   check=True, capture_output=True)
+    import sys
+    r = subprocess.run([sys.executable, "-m", "demucs", "--two-stems=vocals",
+                        "-n", "htdemucs", "-o", workdir, full],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError("demucs failed: " + r.stderr[-500:])
+    base = os.path.splitext(os.path.basename(full))[0]
+    no_vocals = os.path.join(workdir, "htdemucs", base, "no_vocals.wav")
+    if not os.path.isfile(no_vocals):
+        raise RuntimeError(f"demucs produced no no_vocals.wav under {workdir}")
+    return no_vocals
+
+
+def mix_bgm(dubbed_wav: str, bgm_wav: str, out_wav: str, duration: float,
+            bgm_volume: float = 1.0, duck: bool = True):
+    """Mix dubbed voice track over the extracted background (music/SFX).
+    With duck=True, background is sidechain-compressed when speech is present."""
+    duck_fc = (f"[1:a]volume={bgm_volume}[bg];"
+               f"[0:a]aresample=44100,aformat=channel_layouts=stereo,"
+               f"asplit=2[dub][dubsc];"
+               f"[bg][dubsc]sidechaincompress=threshold=0.03:ratio=8:attack=20:"
+               f"release=400[bgd];"
+               f"[dub][bgd]amix=inputs=2:duration=longest:normalize=0,"
+               f"atrim=0:{duration:.3f}[mix]")
+    plain_fc = (f"[1:a]volume={bgm_volume}[bg];"
+                f"[0:a]aresample=44100,aformat=channel_layouts=stereo[dub];"
+                f"[dub][bg]amix=inputs=2:duration=longest:normalize=0,"
+                f"atrim=0:{duration:.3f}[mix]")
+    for fc in ((duck_fc, plain_fc) if duck else (plain_fc,)):
+        try:
+            subprocess.run([config.FFMPEG, "-y", "-i", dubbed_wav, "-i", bgm_wav,
+                            "-filter_complex", fc, "-map", "[mix]",
+                            "-ac", "2", "-ar", "44100", out_wav],
+                           check=True, capture_output=True)
+            return out_wav
+        except subprocess.CalledProcessError:
+            continue
+    raise RuntimeError("bgm mix failed")
+
+
 # ---------------- stage 4: lip-sync (external service hook) ----------------
 
 def lipsync(video_path: str, audio_path: str, out_path: str) -> bool:

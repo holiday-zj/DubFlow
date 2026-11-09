@@ -1,0 +1,6 @@
+full wav bytes: 1889206
+demucs exit: 0 elapsed: 13.4s
+no_vocals.wav: exists=True bytes=1889172
+vocals.wav: exists=True bytes=1889172
+SEPDIR /home/ec2-user/dubflow/data/test/bgm/htdemucs/audio_full
+EXIT=0

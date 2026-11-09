@@ -18,6 +18,7 @@
 | 2. STT | faster-whisper（CTranslate2） | tiny/base/small/medium/large-v3 可选，默认 small；CPU int8 可跑；带 VAD |
 | 3. 翻译 | MarianMT（默认）/ NLLB-200 | 本地免费；商业 API（DeepL 等）预留接口 |
 | 4. TTS | edge-tts（默认，免费神经声线） | 按字幕时间轴逐段合成并 atempo 变速对齐槽位；GPT-SoVITS/CosyVoice 声音克隆通过 HTTP 服务对接（`DUBFLOW_TTS_URL`） |
+| 4a. BGM 保留 | demucs htdemucs（可选，默认开） | 人声/背景分离，只替换人声；背景乐在说话时 sidechain 自动闪避（ducking），可调背景音量 0-200% |
 | 5. 口型同步 | 外部 HTTP 服务（可选） | `DUBFLOW_LIPSYNC_URL` 指向 LatentSync 1.5（Apache-2.0 可商用）或 Wav2Lip（仅内部测试，非商业许可）；本机无 GPU 时自动跳过 |
 | 6. 合成 | FFmpeg | `-map 0:v -map 1:a -map 2:s` 嵌入字幕轨（mov_text），或烧录字幕（libx264 重编码） |
 
@@ -69,6 +70,8 @@ systemd 部署：`systemctl --user enable --now dubflow`（单元见 `scripts/du
 | voice | | 直接指定 edge-tts 声线名，覆盖 gender |
 | burn_subs | | true=字幕烧录进画面 |
 | lipsync | | true=调用外部口型同步服务（未配置则跳过） |
+| keep_bgm | | true=demucs 人声分离，保留原背景音乐/音效并混回（CPU 上约 1.3x 视频时长） |
+| bgm_volume | | 背景音量倍数 0.0-2.0，默认 1.0 |
 
 返回 `{"job_id": "...", "status_url": "/api/jobs/<id>", "result_url": "/api/jobs/<id>/result"}`
 

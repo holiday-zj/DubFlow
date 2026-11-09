@@ -49,6 +49,8 @@ async def create_job(
     voice: str = Form(""),
     burn_subs: bool = Form(False),
     lipsync: bool = Form(False),
+    keep_bgm: bool = Form(False),
+    bgm_volume: float = Form(1.0),
 ):
     _auth(req)
     if tgt_lang not in config.VOICES:
@@ -58,9 +60,12 @@ async def create_job(
         raise HTTPException(400, "whisper_model must be tiny|base|small|medium|large-v3")
     if gender not in ("f", "m"):
         raise HTTPException(400, "gender must be f or m")
+    if not (0.0 <= bgm_volume <= 2.0):
+        raise HTTPException(400, "bgm_volume must be between 0.0 and 2.0")
     params = dict(tgt_lang=tgt_lang, src_lang=src_lang, whisper_model=whisper_model,
                   translate_engine=translate_engine, gender=gender, voice=voice,
-                  burn_subs=burn_subs, lipsync=lipsync,
+                  burn_subs=burn_subs, lipsync=lipsync, keep_bgm=keep_bgm,
+                  bgm_volume=bgm_volume,
                   filename=video.filename or "video.mp4")
     job = jobs.create_job(params)
     d = jobs.job_dir(job["id"])
