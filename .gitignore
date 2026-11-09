@@ -3,11 +3,15 @@ __pycache__/
 *.pyc
 data/jobs/
 data/server.log
+data/tunnel.log
+data/demucs_test.log
+data/flickies_pull.log
 data/mcp_test*.log
 data/test/
 models/
 bin/ffmpeg
 bin/ffprobe
+bin/cloudflared
 *.mp4
 *.wav
 *.mp3
