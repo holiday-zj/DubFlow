@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+data/jobs/
+data/server.log
+data/mcp_test*.log
+data/test/
+models/
+bin/ffmpeg
+bin/ffprobe
+*.mp4
+*.wav
+*.mp3

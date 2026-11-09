@@ -1,0 +1,14 @@
+[Unit]
+Description=DubFlow video localization service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ec2-user/dubflow
+ExecStart=/home/ec2-user/dubflow/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8090
+Restart=always
+RestartSec=5
+Environment=DUBFLOW_WHISPER_MODEL=small
+
+[Install]
+WantedBy=default.target

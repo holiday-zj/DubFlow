@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DubFlow · 视频出海AI本地化</title>
+<style>
+:root{--bg:#0b0e14;--card:#141926;--line:#232b3d;--tx:#e8ecf4;--sub:#8b94a8;--acc:#4f8cff;--ok:#2ecc71;--err:#ff5d5d}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+.wrap{max-width:960px;margin:0 auto;padding:32px 20px}
+h1{font-size:24px;margin-bottom:4px}
+h1 span{color:var(--acc)}
+.tag{color:var(--sub);margin-bottom:28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:20px}
+label{display:block;color:var(--sub);margin:14px 0 6px;font-size:13px}
+select,input[type=text]{width:100%;background:#0d1119;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:9px 12px;font-size:14px}
+.row{display:flex;gap:14px}.row>div{flex:1}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:34px;text-align:center;color:var(--sub);cursor:pointer;transition:.2s;margin-top:6px}
+.drop.on{border-color:var(--acc);color:var(--tx)}
+button.go{width:100%;margin-top:20px;background:var(--acc);color:#fff;border:0;border-radius:10px;padding:13px;font-size:16px;cursor:pointer;font-weight:600}
+button.go:disabled{opacity:.4;cursor:not-allowed}
+.bar{height:8px;background:#0d1119;border-radius:4px;overflow:hidden;margin:12px 0}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),#7d5cff);transition:width .4s}
+.stage{color:var(--sub);font-size:13px}
+.logbox{background:#0d1119;border-radius:8px;padding:12px;margin-top:12px;font:12px/1.7 monospace;color:var(--sub);max-height:180px;overflow:auto;white-space:pre-wrap}
+.result{display:none}.result.show{display:block}
+.result video{width:100%;border-radius:10px;margin-top:10px;background:#000}
+.links a{color:var(--acc);text-decoration:none;margin-right:16px}
+.done{color:var(--ok)}.err{color:var(--err)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left}
+th{color:var(--sub);font-weight:500}
+.pill{background:#0d1119;border:1px solid var(--line);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--sub)}
+h3{margin-bottom:8px;font-size:15px}
+.checkline{margin-top:14px;color:var(--sub)}
+.checkline input{margin-right:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Dub<span>Flow</span></h1>
+<div class="tag">视频出海一站式 AI 本地化 — 字幕提取 · 翻译 · 配音 · 合成</div>
+
+<div class="card">
+  <div id="drop" class="drop">点击选择或拖入视频文件（mp4 / mov / mkv，≤500MB）<br><span id="fname" style="color:var(--acc)"></span></div>
+  <input type="file" id="file" accept="video/*" hidden>
+  <div class="row">
+    <div><label>目标语言</label><select id="tgt"></select></div>
+    <div><label>源语言（留空自动检测）</label><select id="src"><option value="">自动检测</option></select></div>
+  </div>
+  <div class="row">
+    <div><label>Whisper 模型</label><select id="wmodel">
+      <option value="tiny">tiny（最快）</option><option value="base">base</option>
+      <option value="small" selected>small（推荐平衡）</option><option value="medium">medium</option>
+      <option value="large-v3">large-v3（最准）</option></select></div>
+    <div><label>翻译引擎</label><select id="tengine">
+      <option value="marian" selected>MarianMT（轻量）</option>
+      <option value="nllb">NLLB-200（200语种）</option></select></div>
+    <div><label>配音声线</label><select id="gender">
+      <option value="f" selected>女声</option><option value="m">男声</option></select></div>
+  </div>
+  <div class="checkline">
+    <label style="display:inline"><input type="checkbox" id="burn"> 字幕烧录进画面</label>
+    &nbsp;&nbsp;
+    <label style="display:inline"><input type="checkbox" id="lipsync"> 口型同步（需配置外部服务）</label>
+    <span id="lipstate" class="pill"></span>
+  </div>
+  <button class="go" id="go" disabled>开始本地化</button>
+</div>
+
+<div class="card" id="progressCard" style="display:none">
+  <h3>处理进度 <span id="st" class="pill"></span></h3>
+  <div class="bar"><i id="barfill"></i></div>
+  <div class="stage" id="stage"></div>
+  <div class="logbox" id="log"></div>
+</div>
+
+<div class="card result" id="resultCard">
+  <h3 class="done">✅ 完成</h3>
+  <div class="links" id="links"></div>
+  <video id="player" controls></video>
+  <h3 style="margin-top:18px">字幕对照</h3>
+  <div style="max-height:260px;overflow:auto"><table id="segtable"><thead><tr><th>时间</th><th>原文</th><th>译文</th></tr></thead><tbody></tbody></table></div>
+</div>
+
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let selectedFile=null, pollTimer=null, currentJob=null;
+
+fetch('/api/meta').then(r=>r.json()).then(m=>{
+  for(const [code,name] of Object.entries(m.languages)){
+    $('tgt').insertAdjacentHTML('beforeend',`<option value="${code}">${name} (${code})</option>`);
+    $('src').insertAdjacentHTML('beforeend',`<option value="${code}">${name} (${code})</option>`);
+  }
+  $('tgt').value='en';
+  $('lipstate').textContent = m.lipsync_configured?'已配置':'未配置，自动跳过';
+});
+
+$('drop').onclick=()=>$('file').click();
+$('file').onchange=e=>{ if(e.target.files[0]) setFile(e.target.files[0]); };
+$('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('on')};
+$('drop').ondragleave=()=>$('drop').classList.remove('on');
+$('drop').ondrop=e=>{e.preventDefault();$('drop').classList.remove('on');if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0]);};
+function setFile(f){selectedFile=f;$('fname').textContent=`已选择：${f.name}（${(f.size/1048576).toFixed(1)}MB）`;$('go').disabled=false;}
+
+$('go').onclick=async()=>{
+  if(!selectedFile)return;
+  const fd=new FormData();
+  fd.append('video',selectedFile);
+  fd.append('tgt_lang',$('tgt').value);
+  fd.append('src_lang',$('src').value);
+  fd.append('whisper_model',$('wmodel').value);
+  fd.append('translate_engine',$('tengine').value);
+  fd.append('gender',$('gender').value);
+  fd.append('burn_subs',$('burn').checked);
+  fd.append('lipsync',$('lipsync').checked);
+  $('go').disabled=true;
+  $('progressCard').style.display='block';
+  $('resultCard').classList.remove('show');
+  $('log').textContent='上传中…\n';
+  const r=await fetch('/api/jobs',{method:'POST',body:fd});
+  if(!r.ok){alert('提交失败: '+(await r.text()));$('go').disabled=false;return;}
+  const j=await r.json();
+  currentJob=j.job_id;
+  pollTimer=setInterval(poll,2000);
+  poll();
+};
+
+async function poll(){
+  const r=await fetch(`/api/jobs/${currentJob}`);
+  const j=await r.json();
+  $('barfill').style.width=(j.progress*100)+'%';
+  $('st').textContent={queued:'排队中',running:'处理中',done:'完成',error:'失败'}[j.status];
+  $('stage').textContent=`阶段: ${j.stage} · ${(j.progress*100).toFixed(0)}%`;
+  $('log').textContent=j.log.map(l=>`[${new Date(l.t*1000).toLocaleTimeString()}] ${l.msg}`).join('\n');
+  $('log').scrollTop=$('log').scrollHeight;
+  if(j.status==='done'){
+    clearInterval(pollTimer);
+    $('go').disabled=false;
+    showResult(j);
+  }else if(j.status==='error'){
+    clearInterval(pollTimer);
+    $('go').disabled=false;
+    $('stage').innerHTML=`<span class="err">错误: ${j.error}</span>`;
+  }
+}
+
+function showResult(j){
+  const a=j.artifacts;
+  $('links').innerHTML=`<a href="${a.video}" download>⬇ 配音视频</a><a href="${a.translated_srt}" download>⬇ 译文字幕SRT</a><a href="${a.source_srt}" download>⬇ 原文字幕SRT</a><a href="${a.dubbed_audio}" download>⬇ 配音音轨</a>`;
+  $('player').src=a.video;
+  const tb=$('segtable').querySelector('tbody');tb.innerHTML='';
+  for(const s of (j.segments||[])){
+    tb.insertAdjacentHTML('beforeend',`<tr><td style="white-space:nowrap;color:var(--sub)">${fmt(s.start)}→${fmt(s.end)}</td><td>${esc(s.text)}</td><td>${esc(s.text_trans||'')}</td></tr>`);
+  }
+  $('resultCard').classList.add('show');
+}
+function fmt(t){const m=Math.floor(t/60),s=Math.floor(t%60);return `${m}:${String(s).padStart(2,'0')}`}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+</script>
+</body>
+</html>
